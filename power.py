@@ -3,8 +3,9 @@
 import subprocess
 import datetime
 import math
+import traceback
 import urllib.request, urllib.error, urllib.parse
-from time import *
+import time
 import serial
 import threading
 from queue import Queue
@@ -18,7 +19,7 @@ from pprint import pprint
 # ----- serial read process, running in background ---------------------------------------------------
 import config
 
-eol_char = chr(13)									# this is the character at the end of a complete input line
+eol_char = b'\n'									# this is the character at the end of a complete input line
 max_buffer_length = 80								# max number of characters received for processing buffer
                                                     # without receiving eol_char
 new_input_line = ""
@@ -37,18 +38,18 @@ def readserial(eol_char, max_buffer_length):
     while (stop_thread == False):
         while ser.inWaiting() > 0:
             s = ser.read()
-            #print("input:", s)
             if s == eol_char:
                 lines.put(input_line.strip())
+                #print("input:", input_line.strip())
                 input_line = ""
                 break
             elif ord(s) > 31:
-                input_line = input_line + s
+                input_line = input_line + s.decode("utf-8")
                 if len(input_line) > max_buffer_length:
                     lines.put(input_line.strip())
                     input_line = ""
                     break
-        sleep(0.01)
+        time.sleep(0.01)
     return
 
 
@@ -76,12 +77,13 @@ idToKey = {
     "1.8.1*255": "kwh",
     "2.8.1*255": "kwh-org",
     "96.50.0*7": "diagnostic-str",
+    "96.5.5*255": "status-hex",
 }
 
 def parse_line(line, context):
     match = line_regex.match(line)
     if not match:
-        print("not matched: '"+line+"'")
+        #print("not matched: '"+line+"'")
         return
     dic = match.groupdict()
     #print(dic)
@@ -112,10 +114,10 @@ def do_stuff(data):
     if last_post_time + config.post_every_n_sec > time_now:
         return
     last_post_time = time_now
-    pprint("posting:", data)
     post(data)
 
 def post(data):
+    num = 0
     for key, post in config.post_mapping.items():
         if key not in data:
             print("warn: key '%s' not in data" % key)
@@ -132,9 +134,12 @@ def post(data):
             ret = res.read()
             if res.getcode() != 200:
                 print("post return code:", res.getcode())
+            else:
+                num += 1
             #print("return: ", ret)
         except urllib.error.URLError as e:
             print("post err:", e)
+    print("Posted", num, "attributes")
 
 def setup_urllib():
     passman = urllib.request.HTTPPasswordMgrWithDefaultRealm()
@@ -149,19 +154,20 @@ def main(serial=True):
     t.setDaemon(True)
     if serial:
         t.start()
+    context = {}
     while True:
-        context = {}
         try:
             line = lines.get().strip()
             if line == "!":
                 data = process(context)
-                context = {}
                 do_stuff(data)
+                context = {}
             else:
                 parse_line(line, context)
         except Exception as e:
-            print(e)
-        sleep(0.01)
+            print("exception:", repr(e))
+            traceback.print_exc()
+        time.sleep(0.01)
 
 if __name__ == "__main__":
     main()

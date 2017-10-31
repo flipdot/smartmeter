@@ -1,0 +1,16 @@
+[Unit]
+Requires=network.target
+After=network.target
+Requires=dev-ttyUSB0.device
+After=dev-ttyUSB0.device
+
+Description=Smartmeter API poster
+
+[Service]
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+ExecStart=/usr/bin/env python3 /home/%i/smartmeter/power.py
+User=%i
+
+[Install]
+WantedBy=multi-user.target
