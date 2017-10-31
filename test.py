@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-
+import threading
 import unittest
 
 import sys
-from concurrent.futures import thread
 from pprint import pprint
 
 import time
@@ -49,8 +48,10 @@ class ParseTest(unittest.TestCase):
 
         pprint(data)
 
-    def test_post(self):
-        thread.start_new_thread(power.main)
+    def __test_post(self):
+        t = threading.Thread(target=power.main, args=(False,))
+        t.start()
+
         time.sleep(2)
         context = {}
         for line in test_lines:

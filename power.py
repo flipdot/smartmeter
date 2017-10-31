@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-from __future__ import print_function
+
 import subprocess
 import datetime
 import math
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 from time import *
 import serial
-from thread import start_new_thread
-from Queue import Queue
+import threading
+from queue import Queue
 import re
 from pprint import pprint
 
@@ -26,7 +26,7 @@ stop_thread = False									# global flag, used to terminate thread if program e
 
 lines = Queue()
 
-def readserial (eol_char, max_buffer_length):
+def readserial(eol_char, max_buffer_length):
     ser = serial.Serial("/dev/ttyUSB0", 9600, xonxoff=False,
                         bytesize=serial.SEVENBITS, parity=serial.PARITY_EVEN,
                         stopbits=serial.STOPBITS_ONE)
@@ -112,42 +112,47 @@ def do_stuff(data):
     if last_post_time + config.post_every_n_sec > time_now:
         return
     last_post_time = time_now
-    pprint(data)
+    pprint("posting:", data)
     post(data)
 
 def post(data):
-    for key, post in config.post_mapping.iteritems():
+    for key, post in config.post_mapping.items():
         if key not in data:
             print("warn: key '%s' not in data" % key)
             continue
         url = "/".join([
             config.server, post['base'],
-            urllib2.quote(data[key]),
-            urllib2.quote(post['unit']),
-            urllib2.quote(post['desc'])
+            urllib.parse.quote(str(data[key])),
+            urllib.parse.quote(post['unit']),
+            urllib.parse.quote(post['desc'])
         ])
+        #print("posting:", url)
         try:
-            res = urllib2.urlopen(url, timeout=config.timeout)
+            res = urllib.request.urlopen(url, timeout=config.timeout)
             ret = res.read()
             if res.getcode() != 200:
                 print("post return code:", res.getcode())
-            print("return: ", ret)
-        except urllib2.URLError as e:
+            #print("return: ", ret)
+        except urllib.error.URLError as e:
             print("post err:", e)
 
 def setup_urllib():
-    handler = urllib2.HTTPPasswordMgrWithDefaultRealm()
-    handler.add_password(None, config.server, config.server_user, config.server_pass)
-    urllib2.install_opener(urllib2.build_opener(handler))
+    passman = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+    passman.add_password(None, config.server, config.server_user, config.server_pass)
+    authhandler = urllib.request.HTTPBasicAuthHandler(passman)
+    opener = urllib.request.build_opener(authhandler)
+    urllib.request.install_opener(opener)
 
-def main():
+def main(serial=True):
     setup_urllib()
-    start_new_thread(readserial, (eol_char, max_buffer_length))
+    t = threading.Thread(target=readserial, args=(eol_char, max_buffer_length))
+    t.setDaemon(True)
+    if serial:
+        t.start()
     while True:
         context = {}
         try:
             line = lines.get().strip()
-            #print("line: '" + line +"'")
             if line == "!":
                 data = process(context)
                 context = {}
