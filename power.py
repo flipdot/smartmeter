@@ -1,8 +1,9 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 from __future__ import print_function
 import subprocess
 import datetime
 import math
+import urllib2
 from time import *
 import serial
 from thread import start_new_thread
@@ -15,6 +16,8 @@ from pprint import pprint
 
 
 # ----- serial read process, running in background ---------------------------------------------------
+import config
+
 eol_char = chr(13)									# this is the character at the end of a complete input line
 max_buffer_length = 80								# max number of characters received for processing buffer
                                                     # without receiving eol_char
@@ -49,34 +52,6 @@ def readserial (eol_char, max_buffer_length):
     return
 
 
-test_lines = [
-"/HAG5eHZ010C_EHZ1ZA22",
-"",
-"1-0:0.0.0*255(1095110000140890)",  # Eigentumsnr
-"1-0:1.8.1*255(001720.4816)",       # Zaehlerstand bezug
-"1-0:2.8.1*255(000001.9160)",       # Zaehlerstand Lieferg.
-"1-0:96.5.5*255(82)",               # Status, hex
-"0-0:96.1.255*255(0000140890)",     # Fabriknummer
-"1-0:32.7.0*255(238.39*V)",         # Spannung L1
-"1-0:52.7.0*255(235.92*V)",         # Spannung L2
-"1-0:72.7.0*255(234.91*V)",         # Spannung L3
-"1-0:31.7.0*255(000.67*A)",         # Strom L1
-"1-0:51.7.0*255(000.98*A)",         # Strom L2
-"1-0:71.7.0*255(011.18*A)",         # Strom L3
-"1-0:21.7.0*255(+00115*W)",         # Wirkleistung L1
-"1-0:41.7.0*255(+00141*W)",         # Wirkleistung L2
-"1-0:61.7.0*255(+02568*W)",         # Wirkleistung L3
-"1-0:96.50.0*0(EE)",    # Netzstatus (bitmask: Drehfeld, Anlaufschwelle, Energierichtung?)
-"1-0:96.50.0*1(07CE)",  # Netzperiode, Hex (1/100ms)
-"1-0:96.50.0*2(19)",    # aktuelle Chiptemperatur (hex, in C)
-"1-0:96.50.0*3(07)",    # minimale Chiptemperatur
-"1-0:96.50.0*4(26)",    # gemittelte Chiptemperatur
-"1-0:96.50.0*5(09)",    # maximale Chiptemperatur
-"1-0:96.50.0*6(003D381B2C0AE75093FF5D0200009F80)",  # Kontrollnummer
-"1-0:96.50.0*7(00)",                                # Diagnose
-"!",
-]
-
 line_regex = re.compile(r"^1-0:(?P<id>[^\(]+)\((?P<value>[^\)\*]+)(\*(?P<unit>[AWV]))?\)$")
 
 idToKey = {
@@ -92,7 +67,7 @@ idToKey = {
     "41.7.0*255": "wattage-L2",
     "61.7.0*255": "wattage-L3",
     "96.50.0*0": "state-bits-hex",
-    "96.50.0*1": "period-hex",
+    "96.50.0*1": "period-10usec-hex",
     "96.50.0*2": "temp-hex",
     "96.50.0*3": "temp-min-hex",
     "96.50.0*4": "temp-med-hex",
@@ -125,9 +100,48 @@ def parse_line(line, context):
 
 def process(data):
     data['wattage'] = data["wattage-L1"] + data["wattage-L2"] + data["wattage-L3"]
+    data['period'] = data['period-10usec'] / 100.0 / 1000.0
+    data['frequency'] = 1 / data['period']
+    return data
+
+last_post_time = 0
+
+def do_stuff(data):
+    global last_post_time
+    time_now = time.monotonic()
+    if last_post_time + config.post_every_n_sec > time_now:
+        return
+    last_post_time = time_now
     pprint(data)
+    post(data)
+
+def post(data):
+    for key, post in config.post_mapping.iteritems():
+        if key not in data:
+            print("warn: key '%s' not in data" % key)
+            continue
+        url = "/".join([
+            config.server, post['base'],
+            urllib2.quote(data[key]),
+            urllib2.quote(post['unit']),
+            urllib2.quote(post['desc'])
+        ])
+        try:
+            res = urllib2.urlopen(url, timeout=config.timeout)
+            ret = res.read()
+            if res.getcode() != 200:
+                print("post return code:", res.getcode())
+            print("return: ", ret)
+        except urllib2.URLError as e:
+            print("post err:", e)
+
+def setup_urllib():
+    handler = urllib2.HTTPPasswordMgrWithDefaultRealm()
+    handler.add_password(None, config.server, config.server_user, config.server_pass)
+    urllib2.install_opener(urllib2.build_opener(handler))
 
 def main():
+    setup_urllib()
     start_new_thread(readserial, (eol_char, max_buffer_length))
     while True:
         context = {}
@@ -135,8 +149,9 @@ def main():
             line = lines.get().strip()
             #print("line: '" + line +"'")
             if line == "!":
-                process(context)
+                data = process(context)
                 context = {}
+                do_stuff(data)
             else:
                 parse_line(line, context)
         except Exception as e:
@@ -144,7 +159,4 @@ def main():
         sleep(0.01)
 
 if __name__ == "__main__":
-    context = {}
-    for line in test_lines:
-        parse_line(line, context)
-    process(context)
+    main()
