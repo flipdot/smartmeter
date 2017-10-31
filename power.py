@@ -118,6 +118,7 @@ def do_stuff(data):
 
 def post(data):
     num = 0
+    print("posting", len(config.post_mapping.items()), "attributes")
     for key, post in config.post_mapping.items():
         if key not in data:
             print("warn: key '%s' not in data" % key)
