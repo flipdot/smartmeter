@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-
+import http
+import json
 import subprocess
 import datetime
 import math
@@ -107,6 +108,7 @@ def process(data):
     return data
 
 last_post_time = 0
+current_data = None
 
 def do_stuff(data):
     global last_post_time
@@ -114,33 +116,47 @@ def do_stuff(data):
     if last_post_time + config.post_every_n_sec > time_now:
         return
     last_post_time = time_now
-    post(data)
+    try:
+        post(data)
+    except Exception as e:
+        print("post connection err:", repr(e))
+
+first = True
 
 def post(data):
     num = 0
     print("posting", len(config.post_mapping.items()), "attributes")
+    #print(data)
+    conn = http.client.HTTPSConnection(config.server, timeout=config.timeout)
+
+    items = []
     for key, post in config.post_mapping.items():
         if key not in data:
             print("warn: key '%s' not in data" % key)
             continue
-        url = "/".join([
-            config.server, post['base'],
-            urllib.parse.quote(str(data[key])),
-            urllib.parse.quote(post['unit']),
-            urllib.parse.quote(post['desc'])
-        ])
-        #print("posting:", url)
-        try:
-            res = urllib.request.urlopen(url, timeout=config.timeout)
-            ret = res.read()
-            if res.getcode() != 200:
-                print("post return code:", res.getcode())
-            else:
-                num += 1
-            #print("return: ", ret)
-        except urllib.error.URLError as e:
-            print("post err:", e)
-    print("Posted", num, "attributes")
+
+        item = {
+            "SensorType": post['type'],
+            "Location": post['location'],
+            "Value": data[key],
+        }
+        global first
+        if first:
+            first = False
+            item["Unit"] = post['unit']
+            item["Description"] = post['desc']
+        items.append(item)
+
+    try:
+        conn.request("PUT", config.path, body=json.dumps(items))
+        res = conn.getresponse()
+        res_text = res.read().decode('utf-8')
+        print(res.status, res.reason, ":", res_text)
+
+        if res.status != 200:
+            print("post return code:", res.status, res.reason, "text:", res_text)
+    except urllib.error.URLError as e:
+        print("post err:", e)
 
 def setup_urllib():
     passman = urllib.request.HTTPPasswordMgrWithDefaultRealm()
@@ -149,26 +165,43 @@ def setup_urllib():
     opener = urllib.request.build_opener(authhandler)
     urllib.request.install_opener(opener)
 
+def parse_queue():
+    global current_data
+    new_context = {}
+    while True:
+        try:
+            line = lines.get().strip()
+            if line == "!":
+                data = process(new_context)
+                current_data = new_context
+                new_context = {}
+            else:
+                parse_line(line, new_context)
+        except Exception as e:
+            print("exception:", repr(e))
+            traceback.print_exc()
+        time.sleep(0.01)
+
+
 def main(serial=True):
     setup_urllib()
     t = threading.Thread(target=readserial, args=(eol_char, max_buffer_length))
     t.setDaemon(True)
     if serial:
         t.start()
-    context = {}
+
+    t = threading.Thread(target=parse_queue)
+    t.setDaemon(True)
+    t.start()
+
+    global current_data
     while True:
-        try:
-            line = lines.get().strip()
-            if line == "!":
-                data = process(context)
-                do_stuff(data)
-                context = {}
-            else:
-                parse_line(line, context)
-        except Exception as e:
-            print("exception:", repr(e))
-            traceback.print_exc()
-        time.sleep(0.01)
+        if current_data is not None:
+            d = current_data
+            current_data = None
+            do_stuff(d)
+
+        time.sleep(0.1)
 
 if __name__ == "__main__":
     main()
