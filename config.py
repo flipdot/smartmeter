@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 #post_every_n_sec = 60
-post_every_n_sec = 5
+post_every_n_sec = 60
 
 server = "api.flipdot.org"
+https = False
 path = "/sensors/"
 server_user = "XXXXX"
 server_pass = "XXXXX"

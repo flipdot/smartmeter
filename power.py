@@ -127,7 +127,10 @@ def post(data):
     num = 0
     print("posting", len(config.post_mapping.items()), "attributes")
     #print(data)
-    conn = http.client.HTTPSConnection(config.server, timeout=config.timeout)
+    if config.https:
+        conn = http.client.HTTPSConnection(config.server, timeout=config.timeout)
+    else:
+        conn = http.client.HTTPConnection(config.server,timeout=config.timeout)
 
     items = []
     for key, post in config.post_mapping.items():
@@ -151,7 +154,7 @@ def post(data):
         conn.request("PUT", config.path, body=json.dumps(items))
         res = conn.getresponse()
         res_text = res.read().decode('utf-8')
-        print(res.status, res.reason, ":", res_text)
+        #print(res.status, res.reason, ":", res_text)
 
         if res.status != 200:
             print("post return code:", res.status, res.reason, "text:", res_text)
