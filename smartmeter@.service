@@ -8,8 +8,8 @@ Description=Smartmeter API poster
 
 [Service]
 Environment=PYTHONUNBUFFERED=1
-StandardOutput=journal
-ExecStart=/usr/bin/env python3 /home/%i/smartmeter/power.py
+#StandardOutput=journal
+ExecStart=/home/%i/smartmeter/power.py
 User=%i
 
 [Install]
