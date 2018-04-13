@@ -143,11 +143,8 @@ def post(data):
             "Location": post['location'],
             "Value": data[key],
         }
-        global first
-        if first:
-            first = False
-            item["Unit"] = post['unit']
-            item["Description"] = post['desc']
+        item["Unit"] = post['unit']
+        item["Description"] = post['desc']
         items.append(item)
 
     try:
