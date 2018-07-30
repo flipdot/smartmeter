@@ -12,6 +12,7 @@ import threading
 from queue import Queue
 import re
 from pprint import pprint
+import sys
 
 # init serial connection 
 #ser = serial.Serial("/dev/ttyAMA0",9600,xonxoff=False)
@@ -185,14 +186,14 @@ def parse_queue():
 
 def main(serial=True):
     setup_urllib()
-    t = threading.Thread(target=readserial, args=(eol_char, max_buffer_length))
-    t.setDaemon(True)
+    serial_thread = threading.Thread(target=readserial, args=(eol_char, max_buffer_length))
+    serial_thread.setDaemon(True)
     if serial:
-        t.start()
+        serial_thread.start()
 
-    t = threading.Thread(target=parse_queue)
-    t.setDaemon(True)
-    t.start()
+    parse_thread = threading.Thread(target=parse_queue)
+    parse_thread.setDaemon(True)
+    parse_thread.start()
 
     global current_data
     while True:
@@ -201,7 +202,13 @@ def main(serial=True):
             current_data = None
             do_stuff(d)
 
+        if serial and not serial_thread.is_alive():
+            print("Error: serial thread died.")
+            return 1
+        if not parse_thread.is_alive():
+            print("Error: parse thread died.")
+            return
         time.sleep(0.1)
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
