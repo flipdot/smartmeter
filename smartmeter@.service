@@ -12,6 +12,7 @@ Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/%i/smartmeter/power.py
 User=%i
 RestartSec=10
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
