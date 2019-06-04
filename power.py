@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+#!/bin/sh
+"exec" "`dirname $0`/.env/bin/python" "$0" "$@"
+
 import http
 import json
 import subprocess
@@ -30,7 +32,7 @@ stop_thread = False									# global flag, used to terminate thread if program e
 lines = Queue()
 
 def readserial(eol_char, max_buffer_length):
-    ser = serial.Serial("/dev/ttyUSB0", 9600, xonxoff=False,
+    ser = serial.Serial(config.tty, 9600, xonxoff=False,
                         bytesize=serial.SEVENBITS, parity=serial.PARITY_EVEN,
                         stopbits=serial.STOPBITS_ONE)
     ser.flushInput()

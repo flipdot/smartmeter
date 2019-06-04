@@ -9,6 +9,7 @@ path = "/sensors/"
 server_user = "XXXXX"
 server_pass = "XXXXX"
 timeout = 15
+tty = "/dev/tty-smartmeter-0"
 
 # https://<server>sensors/<sensortype>/<location>/<value>[/<unit>[/<description>]]
 post_mapping = {
